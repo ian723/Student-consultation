@@ -81,14 +81,43 @@ public/               Web root
    Edit `src/config.php` if your MySQL user/password differ from the
    XAMPP defaults (`root` / no password).
 
-4. **Run it.** From the project root:
+4. **Run it**, using whichever of these fits how you work:
+
+   **Option 1 — PHP's built-in server** (quickest, no Apache config needed).
+   From the project root:
    ```
    php -S localhost:8000 -t public
    ```
    Then open **http://localhost:8000**.
 
-   (If you'd rather use XAMPP's Apache instead of PHP's built-in server,
-   point a vhost's document root at the `public/` folder.)
+   **Option 2 — XAMPP's Apache**, serving this project directly.
+   > The app's links (`/assets/style.css`, `/login_student.php`, etc.) are
+   > absolute paths rooted at `/`. That only works if Apache's web root
+   > **is** the `public/` folder — if you copy the whole project under
+   > `htdocs` and browse to a subfolder (e.g.
+   > `localhost/Student-consulation/public/`), those links will 404 and the
+   > page will render unstyled.
+
+   1. Copy (or clone) this project into `C:\xampp\htdocs\Student-consulation`
+      (or wherever your XAMPP's `htdocs` lives).
+   2. Open `C:\xampp\apache\conf\httpd.conf` and change both:
+      ```
+      DocumentRoot "C:/xampp/htdocs"
+      <Directory "C:/xampp/htdocs">
+      ```
+      to point at this copy's `public` folder instead:
+      ```
+      DocumentRoot "C:/xampp/htdocs/Student-consulation/public"
+      <Directory "C:/xampp/htdocs/Student-consulation/public">
+      ```
+   3. Restart Apache from the XAMPP Control Panel.
+   4. Open **http://localhost/**.
+
+      Note: this makes the project the *only* thing served from
+      `localhost/` — if you host other projects under `htdocs` too, set up
+      a dedicated virtual host (`httpd-vhosts.conf` + an entry in your
+      `hosts` file) pointing at `public/` instead of changing the main
+      `DocumentRoot`.
 
 ## Try it out
 
