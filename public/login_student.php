@@ -1,0 +1,63 @@
+<?php
+require_once __DIR__ . '/partials/bootstrap.php';
+
+if (current_user()) {
+    header('Location: /index.php');
+    exit;
+}
+
+$error = null;
+$oldEmail = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+        $error = 'Your session expired. Please try again.';
+    } else {
+        $oldEmail = trim($_POST['email'] ?? '');
+        $password = (string) ($_POST['password'] ?? '');
+
+        $user = attempt_login($oldEmail, $password, 'student');
+
+        if (!$user) {
+            $error = 'Incorrect email or password.';
+        } else {
+            login_user($user);
+            header('Location: /student/dashboard.php');
+            exit;
+        }
+    }
+}
+
+$pageTitle = 'Student Login';
+require __DIR__ . '/partials/header.php';
+?>
+
+<div class="auth-wrap">
+  <h1>Student Login</h1>
+  <p class="page-subtitle">Welcome back — log in to manage your bookings.</p>
+
+  <div class="card">
+    <?php if ($error): ?>
+      <div class="alert alert-error">
+        <span class="alert-icon" aria-hidden="true">&#9888;</span>
+        <span><?= e($error) ?></span>
+      </div>
+    <?php endif; ?>
+
+    <form method="post" action="/login_student.php">
+      <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" value="<?= e($oldEmail) ?>" required>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required>
+
+      <button type="submit" class="btn">Log in</button>
+    </form>
+
+    <p class="muted auth-footer-note">No account yet? <a href="/register.php">Register</a></p>
+  </div>
+</div>
+
+<?php require __DIR__ . '/partials/footer.php'; ?>
