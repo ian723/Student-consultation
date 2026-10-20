@@ -507,3 +507,37 @@ tbody tr:last-child td { border-bottom: none; }
     text-align: left;
   }
 }
+.password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-wrapper input {
+    width: 100%;
+    padding-right: 45px;
+    box-sizing: border-box;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 5px;
+}
+.site-footer {
+    text-align: center;
+    padding: 18px 12px;
+    margin-top: 30px;
+    background-color: #fcf9f9e7;
+    color: #555;
+    font-size: 14px;
+    border-top: 1px solid #ddd;
+}
+
+.site-footer p {
+    margin: 0;
+}

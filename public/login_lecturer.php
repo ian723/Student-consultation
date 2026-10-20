@@ -50,8 +50,24 @@ require __DIR__ . '/partials/header.php';
       <label for="email">Email</label>
       <input type="email" id="email" name="email" value="<?= e($oldEmail) ?>" required>
 
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" required>
+      <div class="password-wrapper">
+    <input
+        type="password"
+        name="password"
+        id="password"
+        required
+    >
+
+    <button
+        type="button"
+        class="toggle-password"
+        aria-label="Show password"
+        aria-pressed="false"
+        onclick="togglePassword('password', this)"
+    >
+        <span aria-hidden="true">👁</span>
+    </button>
+</div>
 
       <button type="submit" class="btn">Log in</button>
     </form>
@@ -59,5 +75,22 @@ require __DIR__ . '/partials/header.php';
     <p class="muted auth-footer-note">Lecturer accounts are created by the administrator.</p>
   </div>
 </div>
+<script>
+function togglePassword(inputId, button) {
+    const input = document.getElementById(inputId);
+
+    if (!input) return;
+
+    const showing = input.type === "password";
+
+    input.type = showing ? "text" : "password";
+    button.setAttribute("aria-pressed", String(showing));
+    button.setAttribute(
+        "aria-label",
+        showing ? "Hide password" : "Show password"
+    );
+}
+</script>
+
 
 <?php require __DIR__ . '/partials/footer.php'; ?>
