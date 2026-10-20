@@ -47,27 +47,24 @@ require __DIR__ . '/partials/header.php';
     <form method="post" action="/login_student.php">
       <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
 
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" value="<?= e($oldEmail) ?>" required>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="<?= e($oldEmail) ?>" required>
+      </div>
 
-      <div class="password-wrapper">
-    <input
-        type="password"
-        name="password"
-        id="password"
-        required
-    >
+<div class="password-wrapper">
+    <label for="password">Password</label>
 
-    <button
-        type="button"
-        class="toggle-password"
-        aria-label="Show password"
-        aria-pressed="false"
-        onclick="togglePassword('password', this)"
-    >
-        <span aria-hidden="true">👁</span>
-    </button>
+    <div class="password-input-container">
+        <input type="password" id="password" name="password" required>
+
+        <button type="button" class="toggle-password">
+            👁
+        </button>
+    </div>
 </div>
+
+     
 
       <button type="submit" class="btn">Log in</button>
     </form>
