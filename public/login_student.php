@@ -64,8 +64,6 @@ require __DIR__ . '/partials/header.php';
     </div>
 </div>
 
-     
-
       <button type="submit" class="btn">Log in</button>
     </form>
 
