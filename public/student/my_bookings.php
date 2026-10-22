@@ -28,7 +28,7 @@ require __DIR__ . '/../partials/header.php';
     <div class="empty-state">
       <div class="empty-state-icon">&#128197;</div>
       <p>You haven't booked any consultations yet.</p>
-      <a class="btn" href="/student/lecturers.php">Browse Lecturers</a>
+      <a class="btn" href="/student/lecturers.php">Browse Staff &amp; Services</a>
     </div>
   <?php else: ?>
     <div class="table-wrap">

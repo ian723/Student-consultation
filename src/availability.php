@@ -97,3 +97,78 @@ function list_lecturer_slots(int $lecturerId): array
     $stmt->execute([$lecturerId]);
     return $stmt->fetchAll();
 }
+
+function list_providers_with_availability(): array
+{
+    $sql = "
+        SELECT
+            u.id,
+            u.full_name,
+            u.department,
+            u.role,
+            COUNT(
+                CASE
+                    WHEN cs.status = 'available'
+                     AND cs.slot_date >= CURDATE()
+                    THEN 1
+                END
+            ) AS available_count
+        FROM users u
+        LEFT JOIN consultation_slots cs
+            ON cs.lecturer_id = u.id
+        WHERE u.role IN (
+            'lecturer',
+            'academic_advisor',
+            'department_head',
+            'counselor',
+            'university_staff'
+        )
+        AND u.is_active = 1
+        GROUP BY
+            u.id,
+            u.full_name,
+            u.department,
+            u.role
+        ORDER BY u.full_name
+    ";
+
+    $rows = get_pdo()->query($sql)->fetchAll();
+
+    foreach ($rows as &$row) {
+        $status = availability_status(
+            (int) $row['available_count']
+        );
+
+        $row['status'] = $status;
+        $row['status_label'] = availability_label($status);
+    }
+
+    unset($row);
+
+    return $rows;
+}
+
+
+function get_provider(int $providerId): ?array
+{
+    $stmt = get_pdo()->prepare("
+        SELECT id, full_name, department, role
+        FROM users
+        WHERE id = ?
+          AND is_active = 1
+          AND role IN (
+              'lecturer',
+              'academic_advisor',
+              'department_head',
+              'counselor',
+              'university_staff'
+          )
+    ");
+
+    $stmt->execute([$providerId]);
+
+    $provider = $stmt->fetch();
+
+    return $provider ?: null;
+}
+

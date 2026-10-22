@@ -25,8 +25,8 @@ function logout_user(): void
     session_destroy();
 }
 
-function current_user(): ?array
-{
+
+function current_user(): ?array {
     start_session();
 
     if (empty($_SESSION['user_id'])) {
@@ -34,22 +34,31 @@ function current_user(): ?array
     }
 
     static $cached = null;
+
     if ($cached !== null) {
         return $cached;
     }
 
-    $stmt = get_pdo()->prepare('SELECT id, full_name, email, role, course, department FROM users WHERE id = ?');
+    $stmt = get_pdo()->prepare(
+        'SELECT id, full_name, email, role, course, department, is_active
+         FROM users
+         WHERE id = ?'
+    );
+
     $stmt->execute([$_SESSION['user_id']]);
     $user = $stmt->fetch();
 
-    if (!$user) {
+    // Log out the user if the account no longer exists or is deactivated.
+    if (!$user || (int) $user['is_active'] !== 1) {
         logout_user();
         return null;
     }
 
     $cached = $user;
+
     return $cached;
 }
+
 
 /**
  * Redirects away if the current session isn't logged in as the given role.
@@ -60,10 +69,22 @@ function require_role(string $role): array
     $user = current_user();
 
     if (!$user || $user['role'] !== $role) {
-        $login_page = $role === 'lecturer' ? '/login_lecturer.php' : '/login_student.php';
-        header('Location: ' . $login_page);
-        exit;
-    }
+    $staffRoles = [
+        'lecturer',
+        'academic_advisor',
+        'department_head',
+        'counselor',
+        'university_staff',
+        'admin'
+    ];
+
+    $login_page = in_array($role, $staffRoles, true)
+        ? '/login_staff.php'
+        : '/login_student.php';
+
+    header('Location: ' . $login_page);
+    exit;
+}
 
     return $user;
 }
@@ -72,9 +93,11 @@ function require_role(string $role): array
  * Verifies credentials against a specific role and returns the user row on
  * success, or null on failure (wrong email, wrong password, or wrong role).
  */
-function attempt_login(string $email, string $password, string $role): ?array
-{
-    $stmt = get_pdo()->prepare('SELECT * FROM users WHERE email = ? AND role = ?');
+
+function attempt_login(string $email, string $password, string $role): ?array {
+    $stmt = get_pdo()->prepare(
+        'SELECT * FROM users WHERE email = ? AND role = ? AND is_active = 1'
+    );
     $stmt->execute([$email, $role]);
     $user = $stmt->fetch();
 
@@ -84,6 +107,7 @@ function attempt_login(string $email, string $password, string $role): ?array
 
     return $user;
 }
+
 
 function csrf_token(): string
 {

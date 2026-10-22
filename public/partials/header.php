@@ -45,34 +45,46 @@ function initials(string $name): string
       <span class="brand-text">Kabarak Consultation</span>
     </a>
 
-    <div class="navbar-links">
-      <?php if ($user && $user['role'] === 'student'): ?>
-        <?= nav_link('/student/dashboard.php', 'Dashboard', $currentPath) ?>
-        <?= nav_link('/student/lecturers.php', 'Lecturers', $currentPath) ?>
-        <?= nav_link('/student/my_bookings.php', 'My Bookings', $currentPath) ?>
-      <?php elseif ($user && $user['role'] === 'lecturer'): ?>
-        <?= nav_link('/lecturer/dashboard.php', 'Dashboard', $currentPath) ?>
-        <?= nav_link('/lecturer/manage_slots.php', 'My Slots', $currentPath) ?>
-        <?= nav_link('/lecturer/bookings.php', 'Bookings', $currentPath) ?>
-      <?php else: ?>
-        <?= nav_link('/login_student.php', 'Student Login', $currentPath) ?>
-        <?= nav_link('/login_lecturer.php', 'Lecturer Login', $currentPath) ?>
-        <?= nav_link('/register.php', 'Register', $currentPath) ?>
-      <?php endif; ?>
-    </div>
+    
+<div class="navbar-links">
+  <?php if ($user && $user['role'] === 'student'): ?>
+    <?= nav_link('/student/dashboard.php', 'Dashboard', $currentPath) ?>
+    <?= nav_link('/student/lecturers.php', 'Browse Providers', $currentPath) ?>
+    <?= nav_link('/student/my_bookings.php', 'My Bookings', $currentPath) ?>
 
-    <?php if ($user): ?>
-      <div class="navbar-user">
-        <span class="avatar" aria-hidden="true"><?= e(initials($user['full_name'])) ?></span>
-        <span class="navbar-user-name"><?= e($user['full_name']) ?></span>
-        <a href="/logout.php" class="btn-logout" title="Log out">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M16 17l5-5-5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </a>
-      </div>
+  <?php elseif ($user && in_array($user['role'], [
+      'lecturer',
+      'academic_advisor',
+      'department_head',
+      'counselor',
+      'university_staff'
+  ], true)): ?>
+    <?= nav_link('/staff/dashboard.php', 'Dashboard', $currentPath) ?>
+    <?= nav_link('/staff/manage_slots.php', 'My Slots', $currentPath) ?>
+    <?= nav_link('/staff/bookings.php', 'Bookings', $currentPath) ?>
+
+  <?php elseif ($user && $user['role'] === 'admin'): ?>
+    <?= nav_link('/admin/dashboard.php', 'Admin Dashboard', $currentPath) ?>
+
+  <?php else: ?>
+    <?= nav_link('/login_student.php', 'Student Login', $currentPath) ?>
+    <?= nav_link('/login_staff.php', 'Staff Login', $currentPath) ?>
+    <?= nav_link('/register.php', 'Register', $currentPath) ?>
+    <?php endif; ?>
+</div>
+
+      <?php if ($user): ?>
+        <div class="navbar-user">
+          <span class="avatar" aria-hidden="true"><?= e(initials($user['full_name'])) ?></span>
+          <span class="navbar-user-name"><?= e($user['full_name']) ?></span>
+          <a href="/logout.php" class="btn-logout" title="Log out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M16 17l5-5-5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </div>
     <?php endif; ?>
   </div>
 </nav>

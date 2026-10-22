@@ -3,29 +3,35 @@ require_once __DIR__ . '/../partials/bootstrap.php';
 
 $user = require_role('student');
 
-$lecturerId = (int) ($_GET['lecturer_id'] ?? 0);
-$lecturer = $lecturerId ? get_lecturer($lecturerId) : null;
+$providerId = (int) ($_GET['lecturer_id'] ?? 0);
+$provider = $providerId ? get_provider($providerId) : null;
 
-if (!$lecturer) {
-    flash_set('error', 'Lecturer not found.');
+if (!$provider) {
+    flash_set('error', 'Staff member not found or account is inactive.');
     header('Location: /student/lecturers.php');
     exit;
 }
 
-$slots = list_future_slots($lecturerId);
+$slots = list_future_slots($providerId);
 
-$pageTitle = $lecturer['full_name'] . ' — Consultation Slots';
+$pageTitle = $provider['full_name'] . ' — Consultation Slots';
 require __DIR__ . '/../partials/header.php';
 ?>
 
-<h1><?= e($lecturer['full_name']) ?></h1>
-<p class="page-subtitle"><?= e($lecturer['department'] ?? '') ?></p>
+<h1><?= e($provider['full_name']) ?></h1>
+
+<p class="page-subtitle">
+    <?= e(ucwords(str_replace('_', ' ', $provider['role']))) ?>
+    <?php if (!empty($provider['department'])): ?>
+        — <?= e($provider['department']) ?>
+    <?php endif; ?>
+</p>
 
 <div class="card">
   <?php if (!$slots): ?>
     <div class="empty-state">
       <div class="empty-state-icon">&#128197;</div>
-      <p>No upcoming consultation slots for this lecturer.</p>
+      <p>No upcoming consultation slots for this provider.</p>
     </div>
   <?php else: ?>
     <ul class="slot-list">

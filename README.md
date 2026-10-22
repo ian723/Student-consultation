@@ -1,145 +1,191 @@
 # Kabarak Student Consultation Booking System
 
-A web-based booking system that lets students see when their lecturers are
-free for consultation and book a slot directly, instead of guessing office
-hours or turning up to a full queue. Lecturers manage their own availability
-and see who's booked in with them.
+A web-based booking system that allows students at Kabarak University to
+browse academic staff and university services, view consultation availability,
+and book appointments without having to guess office hours or queue in person.
 
-Built as a school project for Kabarak University using plain **PHP + MySQL**
-(no framework), implementing a 4-epic, 12-user-story spec: registration &
-auth, lecturer/slot browsing, booking & cancellation, and
-confirmations/administration.
+The system supports students, lecturers, academic advisors, department heads,
+counselors, university staff, and administrators. Students can browse providers
+and manage bookings; providers manage their consultation slots and appointments;
+and administrators manage staff accounts.
+
+Built as a school project for Kabarak University using plain PHP and MySQL
+(no framework), with HTML, CSS, and JavaScript for the interface.
+
+---
 
 ## Features
 
-**Students**
-- Register and log in
-- Browse lecturers with a live **availability indicator** — `Available`,
-  `Limited Slots`, or `Fully Booked`, based on how many open slots a
-  lecturer currently has
-- View a lecturer's upcoming consultation slots and book one
-- View "My Bookings" and cancel an upcoming booking (frees the slot again)
+### Students
 
-**Lecturers**
-- Log in to a dedicated dashboard
-- Create, edit, and delete consultation slots (locked once a slot is booked,
-  to protect the student's booking)
-- See which students have booked their slots, with status and upcoming flags
+- Register and log in.
+- Browse **Staff & Services** with availability indicators: Available, Limited
+  Slots, or Fully Booked, based on the number of future slots currently marked
+  as available.
+- View a provider's upcoming consultation slots and book an available slot.
+- View **My Bookings** and cancel an upcoming booking, where cancellation is
+  allowed.
 
-**Under the hood**
-- Booking is done inside a DB transaction with row locking
-  (`SELECT ... FOR UPDATE`), plus a DB-level uniqueness constraint, so two
-  students can never book the same slot — verified by bypassing the UI and
-  POSTing directly at the endpoint.
-- Every protected page is guarded by role (student-only / lecturer-only) at
-  the top of the script, not just hidden in the UI.
-- Passwords are hashed with `password_hash()`; all queries use PDO prepared
-  statements; all output is escaped; forms are CSRF-protected.
+### Staff and Service Providers
 
-## Tech stack
+- Log in to a dedicated staff dashboard.
+- Manage consultation slots and availability.
+- See students who have booked their slots, with booking status and upcoming
+  appointment information.
+- Supported provider roles include lecturers, academic advisors, department
+  heads, counselors, and university staff.
 
-- PHP 8+ (no framework — plain procedural scripts, PDO for the database)
+### Administrators
+
+- Log in through the Staff Login page using an admin account.
+- Access a separate admin dashboard.
+- Create, edit, deactivate, and reactivate staff accounts.
+
+### Under the Hood
+
+- Uses PHP sessions and role-based access checks for protected pages.
+- Passwords are hashed using `password_hash()` and checked with
+  `password_verify()`.
+- Database queries use PDO prepared statements, and rendered output is escaped.
+- Forms use CSRF protection where implemented.
+- Consultation slots use the `lecturer_id` database column to reference the
+  provider's user ID, including supported non-lecturer staff roles.
+- Booking concurrency and duplicate-booking protection should be verified
+  against the current database schema and booking endpoint before claiming
+  guarantees about simultaneous bookings.
+
+---
+
+## Tech Stack
+
+- PHP 8+ (plain PHP scripts with PDO for database access; no framework)
 - MySQL / MariaDB
-- Vanilla HTML/CSS/JS (no build step, no frontend framework)
+- Vanilla HTML, CSS, and JavaScript (no build step or frontend framework)
 
-## Project structure
+---
 
-```
+## Project Structure
+
+```text
 sql/
-  schema.sql          Database tables (users, consultation_slots, bookings)
-  seed.sql            Demo lecturers + sample slots
+  schema.sql             Database tables and constraints
+  seed.sql               Demo/seed data, if provided
 src/
-  config.php          DB credentials (gitignored — copy from config.example.php)
-  db.php              PDO connection helper
-  auth.php            Sessions, login/logout, role guards, CSRF, flash messages
-  availability.php     Availability-indicator logic, lecturer/slot queries
-public/               Web root
-  index.php, register.php, login_student.php, login_lecturer.php, logout.php
-  student/            Student-only pages (dashboard, lecturers, booking, etc.)
-  lecturer/           Lecturer-only pages (dashboard, slot management, bookings)
-  partials/           Shared header/footer/bootstrap includes
-  assets/style.css    Stylesheet
+  config.example.php     Example database configuration
+  config.php             Local database credentials (gitignored)
+  db.php                 PDO connection helper
+  auth.php               Sessions, login/logout, role guards, CSRF and flash messages
+  availability.php       Provider availability and slot queries
+public/                  Web root
+  index.php              Homepage
+  register.php           Student registration
+  login_student.php      Student login
+  login_staff.php        Staff and admin login
+  logout.php             Logout
+  student/               Student pages (dashboard, provider directory, slots and bookings)
+  staff/                  Staff dashboard, slot management and bookings
+  admin/                  Admin dashboard and staff account management
+  partials/               Shared header/footer/bootstrap includes
+  assets/                 Stylesheets and other public assets
 ```
+
+---
 
 ## Setup
 
-1. **Install a local PHP + MySQL environment** if you don't have one —
-   [XAMPP](https://www.apachefriends.org/) is the simplest option and
-   includes phpMyAdmin for inspecting the database.
+1. Install a local PHP and MySQL environment if you don't have one.
+   [XAMPP](https://www.apachefriends.org/) is a straightforward option and
+   includes phpMyAdmin.
 
-2. **Import the database:**
-   ```
-   mysql -u root < sql/schema.sql
-   mysql -u root < sql/seed.sql
-   ```
-   (or run both files through phpMyAdmin's "Import" tab)
+2. Create and import the database.
 
-3. **Configure the database connection:**
-   ```
-   cp src/config.example.php src/config.php
-   ```
-   Edit `src/config.php` if your MySQL user/password differ from the
-   XAMPP defaults (`root` / no password).
+   Start MySQL in XAMPP and open phpMyAdmin. Create the database expected by
+   the application; the current local configuration uses
+   `kabarak_consultation`.
 
-4. **Run it**, using whichever of these fits how you work:
+   Import `sql/schema.sql` first, then `sql/seed.sql` if you want the supplied
+   demo data. You can use phpMyAdmin's Import tab, or the MySQL command line:
 
-   **Option 1 — PHP's built-in server** (quickest, no Apache config needed).
-   From the project root:
+   ```sh
+   mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS kabarak_consultation;"
+   mysql -u root -p kabarak_consultation < sql/schema.sql
+   mysql -u root -p kabarak_consultation < sql/seed.sql
    ```
+
+   If your local MySQL root account has no password, omit `-p`. If either SQL
+   file contains database-creation or selection statements, follow the
+   instructions in those files and avoid importing seed data repeatedly.
+
+3. Configure the database connection.
+
+   Copy `src/config.example.php` to `src/config.php`:
+
+   ```powershell
+   Copy-Item src/config.example.php src/config.php
+   ```
+
+   Edit `src/config.php` to match your local MySQL host, port, database name,
+   username, and password. Keep `config.php` out of Git; never commit real
+   credentials.
+
+4. Run the application.
+
+   From the project root, start PHP's built-in development server. With XAMPP
+   installed in the default Windows location:
+
+   ```powershell
+   C:\xampp\php\php.exe -S localhost:8000 -t public
+   ```
+
+   Alternatively, if PHP is on your `PATH`:
+
+   ```sh
    php -S localhost:8000 -t public
    ```
-   Then open **http://localhost:8000**.
 
-   **Option 2 — XAMPP's Apache**, serving this project directly.
-   > The app's links (`/assets/style.css`, `/login_student.php`, etc.) are
-   > absolute paths rooted at `/`. That only works if Apache's web root
-   > **is** the `public/` folder — if you copy the whole project under
-   > `htdocs` and browse to a subfolder (e.g.
-   > `localhost/Student-consulation/public/`), those links will 404 and the
-   > page will render unstyled.
+   Open [http://localhost:8000]in your browser. Keep
+   the terminal open while testing. The built-in server is for local
+   development, not production hosting.
 
-   1. Copy (or clone) this project into `C:\xampp\htdocs\Student-consulation`
-      (or wherever your XAMPP's `htdocs` lives).
-   2. Open `C:\xampp\apache\conf\httpd.conf` and change both:
-      ```
-      DocumentRoot "C:/xampp/htdocs"
-      <Directory "C:/xampp/htdocs">
-      ```
-      to point at this copy's `public` folder instead:
-      ```
-      DocumentRoot "C:/xampp/htdocs/Student-consulation/public"
-      <Directory "C:/xampp/htdocs/Student-consulation/public">
-      ```
-   3. Restart Apache from the XAMPP Control Panel.
-   4. Open **http://localhost/**.
+   To use XAMPP Apache, the app's URL paths are rooted at `/`. Apache's document
+   root must point to the project's `public/` directory, or you must configure
+   a suitable virtual host. Simply browsing to a nested `.../public/` path may
+   cause CSS and links to fail.
 
-      Note: this makes the project the *only* thing served from
-      `localhost/` — if you host other projects under `htdocs` too, set up
-      a dedicated virtual host (`httpd-vhosts.conf` + an entry in your
-      `hosts` file) pointing at `public/` instead of changing the main
-      `DocumentRoot`.
+---
 
-## Try it out
+## Try It Out
 
-Register a new student account from the homepage, or log in as a
-pre-seeded lecturer:
+1. Register a new student account from the homepage.
+2. Log in as a student and browse **Staff & Services**.
+3. Select a provider, view their upcoming consultation slots, and book an
+   available slot.
+4. Visit the student dashboard or bookings page to review the appointment.
+5. Log in through Staff Login to manage provider slots and view bookings.
+6. Log in as an administrator to manage staff accounts.
 
-| Email                          | Password      |
-|---------------------------------|--------------|
-| alice.mwangi@kabarak.ac.ke      | lecturer123  |
-| brian.kiptoo@kabarak.ac.ke      | lecturer123  |
-| caroline.wafula@kabarak.ac.ke   | lecturer123  |
+### Login Pages
 
-Lecturer accounts are pre-seeded rather than self-registered, matching the
-project's user stories (only student registration is in scope).
+- Student Login: [http://localhost:8000/login_student.php]
+- Staff and Admin Login: [http://localhost:8000/login_staff.php]
+- Admin dashboard (after logging in):
+  [http://localhost:8000/admin/dashboard.php]
 
-## Possible future improvements
+Use test accounts only for demonstrations. Check the current database seed file
+or create accounts through the supported workflows for valid credentials. Do
+not publish passwords, password hashes, or private credentials in this README.
 
-- Search/filter lecturers by department or name
-- Recurring slots (e.g. "every Tuesday 2–4pm") instead of one-off creation
-- Email/SMS reminders before a consultation
-- An admin panel for managing lecturer accounts instead of SQL seeding
-- Lecturer self-registration with an approval step
-- A notes/reason field so students can say what they want to discuss
-- Pagination once lecturer/booking lists grow large
-- Automated tests (PHPUnit) for the booking/availability logic
+---
+
+## Possible Future Improvements
+
+- Add automated tests for authentication, role permissions, availability
+  calculations, and booking conflicts.
+- Add email/SMS confirmations and appointment reminders.
+- Add appointment rescheduling and configurable cancellation rules.
+- Improve searching and filtering by provider name, department, service, and
+  availability.
+- Support recurring consultation slots.
+- Add administrator reports for booking counts and provider usage.
+- Continue improving accessibility and mobile responsiveness.
+- Add deployment instructions for a secure staging or production environment.
