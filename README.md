@@ -172,8 +172,7 @@ public/                  Web root
   [http://localhost:8000/admin/dashboard.php]
 
 Use test accounts only for demonstrations. Check the current database seed file
-or create accounts through the supported workflows for valid credentials. Do
-not publish passwords, password hashes, or private credentials in this README.
+or create accounts through the supported workflows for valid credentials. 
 
 ---
 
