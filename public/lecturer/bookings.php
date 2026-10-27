@@ -8,7 +8,7 @@ $stmt = get_pdo()->prepare("
     FROM bookings b
     JOIN consultation_slots cs ON cs.id = b.slot_id
     JOIN users u ON u.id = b.student_id
-    WHERE cs.lecturer_id = ?
+    WHERE cs.staff_id = ?
     ORDER BY cs.slot_date DESC, cs.start_time DESC
 ");
 $stmt->execute([$user['id']]);

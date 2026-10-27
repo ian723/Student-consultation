@@ -1,5 +1,6 @@
 
 <?php
+
 require_once __DIR__ . '/../partials/bootstrap.php';
 
 $staffRoles = [
@@ -12,12 +13,15 @@ $staffRoles = [
 
 $user = current_user();
 
+// Only authenticated staff members may view their own bookings.
 if (!$user || !in_array($user['role'], $staffRoles, true)) {
     header('Location: /login_staff.php');
     exit;
 }
 
-$stmt = get_pdo()->prepare("
+$pdo = get_pdo();
+
+$stmt = $pdo->prepare("
     SELECT
         b.id,
         b.status,
@@ -29,7 +33,7 @@ $stmt = get_pdo()->prepare("
     FROM bookings b
     JOIN consultation_slots cs ON cs.id = b.slot_id
     JOIN users s ON s.id = b.student_id
-    WHERE cs.lecturer_id = ?
+    WHERE cs.staff_id = ?
     ORDER BY cs.slot_date DESC, cs.start_time DESC
 ");
 
@@ -37,6 +41,7 @@ $stmt->execute([$user['id']]);
 $bookings = $stmt->fetchAll();
 
 $today = date('Y-m-d');
+$currentTime = date('H:i:s');
 
 $pageTitle = 'My Consultation Bookings';
 require __DIR__ . '/../partials/header.php';
@@ -72,7 +77,13 @@ require __DIR__ . '/../partials/header.php';
                         <?php
                         $isUpcoming =
                             $booking['status'] === 'active'
-                            && $booking['slot_date'] >= $today;
+                            && (
+                                $booking['slot_date'] > $today
+                                || (
+                                    $booking['slot_date'] === $today
+                                    && $booking['start_time'] > $currentTime
+                                )
+                            );
                         ?>
 
                         <tr>

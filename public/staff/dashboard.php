@@ -1,7 +1,9 @@
 
 <?php
+
 require_once __DIR__ . '/../partials/bootstrap.php';
 
+// Only allow authenticated staff members to access this dashboard.
 $staffRoles = [
     'lecturer',
     'academic_advisor',
@@ -17,29 +19,47 @@ if (!$user || !in_array($user['role'], $staffRoles, true)) {
     exit;
 }
 
+// Count available future consultation slots for the logged-in staff member.
 $stmt = get_pdo()->prepare("
     SELECT COUNT(*)
     FROM consultation_slots
-    WHERE lecturer_id = ?
+    WHERE staff_id = ?
       AND status = 'available'
-      AND slot_date >= CURDATE()
+      AND (
+          slot_date > CURDATE()
+          OR (
+              slot_date = CURDATE()
+              AND start_time > CURTIME()
+          )
+      )
 ");
+
 $stmt->execute([$user['id']]);
 $availableCount = (int) $stmt->fetchColumn();
 
+// Count active upcoming bookings for the logged-in staff member.
 $stmt = get_pdo()->prepare("
     SELECT COUNT(*)
     FROM bookings b
     JOIN consultation_slots cs ON cs.id = b.slot_id
-    WHERE cs.lecturer_id = ?
+    WHERE cs.staff_id = ?
       AND b.status = 'active'
-      AND cs.slot_date >= CURDATE()
+      AND (
+          cs.slot_date > CURDATE()
+          OR (
+              cs.slot_date = CURDATE()
+              AND cs.start_time > CURTIME()
+          )
+      )
 ");
+
 $stmt->execute([$user['id']]);
 $upcomingBookings = (int) $stmt->fetchColumn();
 
+// Determine the staff member's availability status.
 $status = availability_status($availableCount);
 
+// Display a readable label for each staff role.
 $roleLabels = [
     'lecturer' => 'Lecturer',
     'academic_advisor' => 'Academic Advisor',

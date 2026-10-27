@@ -1,24 +1,31 @@
+
 <?php
 
 require_once __DIR__ . '/db.php';
 
-const LIMITED_SLOTS_THRESHOLD = 2; // 1..this many available slots => "Limited Slots"
+const LIMITED_SLOTS_THRESHOLD = 2;
 
 /**
- * Returns 'available' | 'limited' | 'full' based on how many future,
- * unbooked slots a lecturer currently has.
+ * Determines availability from the number of future available slots.
+ *
+ * Returns: available, limited, or full.
  */
 function availability_status(int $available_count): string
 {
     if ($available_count <= 0) {
         return 'full';
     }
+
     if ($available_count <= LIMITED_SLOTS_THRESHOLD) {
         return 'limited';
     }
+
     return 'available';
 }
 
+/**
+ * Returns a human-readable availability label.
+ */
 function availability_label(string $status): string
 {
     return match ($status) {
@@ -30,8 +37,23 @@ function availability_label(string $status): string
 }
 
 /**
- * Returns all lecturers with their full name, department, and computed
- * availability status/label based on future available slots.
+ * Returns the shared SQL condition for slots that have not started yet.
+ */
+function future_slot_condition(): string
+{
+    return "(
+        cs.slot_date > CURDATE()
+        OR (
+            cs.slot_date = CURDATE()
+            AND cs.start_time > CURTIME()
+        )
+    )";
+}
+
+/**
+ * Returns all active lecturers and their future availability.
+ *
+ * Retained for compatibility with existing lecturer-specific pages.
  */
 function list_lecturers_with_availability(): array
 {
@@ -40,95 +62,22 @@ function list_lecturers_with_availability(): array
             u.id,
             u.full_name,
             u.department,
-            COUNT(CASE WHEN cs.status = 'available' AND cs.slot_date >= CURDATE() THEN 1 END) AS available_count
-        FROM users u
-        LEFT JOIN consultation_slots cs ON cs.lecturer_id = u.id
-        WHERE u.role = 'lecturer'
-        GROUP BY u.id, u.full_name, u.department
-        ORDER BY u.full_name
-    ";
-
-    $rows = get_pdo()->query($sql)->fetchAll();
-
-    foreach ($rows as &$row) {
-        $status = availability_status((int) $row['available_count']);
-        $row['status'] = $status;
-        $row['status_label'] = availability_label($status);
-    }
-
-    return $rows;
-}
-
-function get_lecturer(int $lecturerId): ?array
-{
-    $stmt = get_pdo()->prepare("SELECT id, full_name, department FROM users WHERE id = ? AND role = 'lecturer'");
-    $stmt->execute([$lecturerId]);
-    $lecturer = $stmt->fetch();
-    return $lecturer ?: null;
-}
-
-/**
- * Returns a lecturer's future consultation slots (available and booked),
- * ordered chronologically, for display to students.
- */
-function list_future_slots(int $lecturerId): array
-{
-    $stmt = get_pdo()->prepare("
-        SELECT id, slot_date, start_time, end_time, status
-        FROM consultation_slots
-        WHERE lecturer_id = ? AND slot_date >= CURDATE()
-        ORDER BY slot_date, start_time
-    ");
-    $stmt->execute([$lecturerId]);
-    return $stmt->fetchAll();
-}
-
-/**
- * Returns ALL of a lecturer's own slots (past and future) for management.
- */
-function list_lecturer_slots(int $lecturerId): array
-{
-    $stmt = get_pdo()->prepare("
-        SELECT id, slot_date, start_time, end_time, status
-        FROM consultation_slots
-        WHERE lecturer_id = ?
-        ORDER BY slot_date DESC, start_time
-    ");
-    $stmt->execute([$lecturerId]);
-    return $stmt->fetchAll();
-}
-
-function list_providers_with_availability(): array
-{
-    $sql = "
-        SELECT
-            u.id,
-            u.full_name,
-            u.department,
-            u.role,
             COUNT(
                 CASE
                     WHEN cs.status = 'available'
-                     AND cs.slot_date >= CURDATE()
+                     AND " . future_slot_condition() . "
                     THEN 1
                 END
             ) AS available_count
         FROM users u
         LEFT JOIN consultation_slots cs
-            ON cs.lecturer_id = u.id
-        WHERE u.role IN (
-            'lecturer',
-            'academic_advisor',
-            'department_head',
-            'counselor',
-            'university_staff'
-        )
-        AND u.is_active = 1
+            ON cs.staff_id = u.id
+        WHERE u.role = 'lecturer'
+          AND u.is_active = 1
         GROUP BY
             u.id,
             u.full_name,
-            u.department,
-            u.role
+            u.department
         ORDER BY u.full_name
     ";
 
@@ -148,11 +97,161 @@ function list_providers_with_availability(): array
     return $rows;
 }
 
+/**
+ * Returns an active lecturer by ID.
+ *
+ * Retained for compatibility with existing lecturer-specific pages.
+ */
+function get_lecturer(int $lecturerId): ?array
+{
+    $stmt = get_pdo()->prepare("
+        SELECT id, full_name, department
+        FROM users
+        WHERE id = ?
+          AND role = 'lecturer'
+          AND is_active = 1
+    ");
 
+    $stmt->execute([$lecturerId]);
+
+    $lecturer = $stmt->fetch();
+
+    return $lecturer ?: null;
+}
+
+/**
+ * Returns future consultation slots for a provider.
+ * Both available and booked slots are included for display.
+ */
+function list_future_slots(int $providerId): array
+{
+    $sql = "
+        SELECT
+            cs.id,
+            cs.staff_id,
+            cs.slot_date,
+            cs.start_time,
+            cs.end_time,
+            cs.status
+        FROM consultation_slots cs
+        JOIN users u ON u.id = cs.staff_id
+        WHERE cs.staff_id = ?
+          AND u.is_active = 1
+          AND u.role IN (
+              'lecturer',
+              'academic_advisor',
+              'department_head',
+              'counselor',
+              'university_staff'
+          )
+          AND " . future_slot_condition() . "
+        ORDER BY cs.slot_date ASC, cs.start_time ASC
+    ";
+
+    $stmt = get_pdo()->prepare($sql);
+    $stmt->execute([$providerId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Returns all consultation slots belonging to a provider,
+ * including past slots, for slot management.
+ *
+ * Retained under its original function name for compatibility.
+ */
+function list_lecturer_slots(int $lecturerId): array
+{
+    $stmt = get_pdo()->prepare("
+        SELECT
+            id,
+            staff_id,
+            slot_date,
+            start_time,
+            end_time,
+            status
+        FROM consultation_slots
+        WHERE staff_id = ?
+        ORDER BY slot_date DESC, start_time ASC
+    ");
+
+    $stmt->execute([$lecturerId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Returns all active consultation providers and their availability.
+ * Students and administrators are deliberately excluded.
+ */
+function list_providers_with_availability(): array
+{
+    $sql = "
+        SELECT
+            u.id,
+            u.full_name,
+            u.department,
+            u.role,
+            u.service,
+            u.description,
+            COUNT(
+                CASE
+                    WHEN cs.status = 'available'
+                     AND " . future_slot_condition() . "
+                    THEN 1
+                END
+            ) AS available_count
+        FROM users u
+        LEFT JOIN consultation_slots cs
+            ON cs.staff_id = u.id
+        WHERE u.is_active = 1
+          AND u.role IN (
+              'lecturer',
+              'academic_advisor',
+              'department_head',
+              'counselor',
+              'university_staff'
+          )
+        GROUP BY
+            u.id,
+            u.full_name,
+            u.department,
+            u.role,
+            u.service,
+            u.description
+        ORDER BY u.full_name ASC
+    ";
+
+    $rows = get_pdo()->query($sql)->fetchAll();
+
+    foreach ($rows as &$row) {
+        $status = availability_status(
+            (int) $row['available_count']
+        );
+
+        $row['status'] = $status;
+        $row['status_label'] = availability_label($status);
+    }
+
+    unset($row);
+
+    return $rows;
+}
+
+/**
+ * Returns an active consultation provider by ID.
+ */
 function get_provider(int $providerId): ?array
 {
     $stmt = get_pdo()->prepare("
-        SELECT id, full_name, department, role
+        SELECT
+            id,
+            full_name,
+            email,
+            department,
+            role,
+            service,
+            description
         FROM users
         WHERE id = ?
           AND is_active = 1
@@ -171,4 +270,3 @@ function get_provider(int $providerId): ?array
 
     return $provider ?: null;
 }
-

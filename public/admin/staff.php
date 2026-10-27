@@ -1,17 +1,10 @@
 
 <?php
-require_once __DIR__ . '/../../src/auth.php';
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../partials/bootstrap.php';
 
-$user = current_user();
-
-if (!$user || $user['role'] !== 'admin') {
-    header('Location: /login_staff.php');
-    exit;
-}
+// Only administrators may manage staff accounts.
+$user = require_role('admin');
 
 $pdo = get_pdo();
 
@@ -31,6 +24,7 @@ $roleLabels = [
     'university_staff' => 'University Staff'
 ];
 
+// Create a CSRF token for this page.
 if (empty($_SESSION['admin_staff_csrf'])) {
     $_SESSION['admin_staff_csrf'] = bin2hex(random_bytes(32));
 }
@@ -39,22 +33,91 @@ $csrfToken = $_SESSION['admin_staff_csrf'];
 $message = '';
 $error = '';
 
-function escape_output($value): string
+/**
+ * Normalize department according to the selected staff role.
+ */
+function normalize_staff_department(string $role, string $department): string
 {
-    return htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
+    if ($role === 'counselor') {
+        return 'Counseling Services';
+    }
+
+    if ($role === 'university_staff') {
+        return 'University Services';
+    }
+
+    return trim($department);
 }
 
-function is_valid_staff_role(string $role, array $roles): bool
-{
-    return in_array($role, $roles, true);
+/**
+ * Validate the staff account fields.
+ */
+function validate_staff_fields(
+    string $fullName,
+    string $email,
+    string $role,
+    string $department,
+    string $service,
+    string $password,
+    bool $creating,
+    array $allowedRoles
+): void {
+    if ($fullName === '' || mb_strlen($fullName) > 150) {
+        throw new RuntimeException(
+            'Enter a name containing no more than 150 characters.'
+        );
+    }
+
+    if (
+        !filter_var($email, FILTER_VALIDATE_EMAIL)
+        || strlen($email) > 190
+    ) {
+        throw new RuntimeException(
+            'Enter a valid email address containing no more than 190 characters.'
+        );
+    }
+
+    if (!in_array($role, $allowedRoles, true)) {
+        throw new RuntimeException('Select a valid staff role.');
+    }
+
+    if (
+        $role !== 'counselor'
+        && $role !== 'university_staff'
+        && $department === ''
+    ) {
+        throw new RuntimeException(
+            'A department is required for the selected staff role.'
+        );
+    }
+
+    if ($role === 'university_staff' && $service === '') {
+        throw new RuntimeException(
+            'Enter the service provided by this university staff member.'
+        );
+    }
+
+    if ($password !== '' && strlen($password) < 8) {
+        throw new RuntimeException(
+            'Passwords must contain at least 8 characters.'
+        );
+    }
+
+    if ($creating && $password === '') {
+        throw new RuntimeException(
+            'An initial password is required when creating a staff account.'
+        );
+    }
 }
 
 // Handle form submissions.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submittedToken = $_POST['csrf_token'] ?? '';
 
-    if (!is_string($submittedToken) ||
-        !hash_equals($csrfToken, $submittedToken)) {
+    if (
+        !is_string($submittedToken)
+        || !hash_equals($csrfToken, $submittedToken)
+    ) {
         $error = 'Your session has expired. Refresh the page and try again.';
     } else {
         $action = $_POST['action'] ?? '';
@@ -62,42 +125,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             if ($action === 'create') {
                 $fullName = trim($_POST['full_name'] ?? '');
-                $email = trim($_POST['email'] ?? '');
+                $email = strtolower(trim($_POST['email'] ?? ''));
                 $password = $_POST['password'] ?? '';
                 $role = $_POST['role'] ?? '';
                 $department = trim($_POST['department'] ?? '');
-               if ($role === 'counselor') {
-                $department = 'Counseling Services';
-                } elseif ($role === 'university_staff') {
-                 $department = 'University Services';
-                }
                 $service = trim($_POST['service'] ?? '');
                 $description = trim($_POST['description'] ?? '');
 
-                if (
-                    $fullName === '' ||
-                    !filter_var($email, FILTER_VALIDATE_EMAIL) ||
-                    ($role !== 'counselor' &&
-                     $role !== 'university_staff' &&
-                     $department === '') ||
-                    !is_valid_staff_role($role, $staffRoles) ||
-                    !is_string($password) ||
-                    strlen($password) < 8
-                ) {
-                    throw new RuntimeException(
-                        'Enter a valid name, email, department and role. ' .
-                        'The password must contain at least 8 characters.'
-                    );
+                if (!is_string($password)) {
+                    throw new RuntimeException('Invalid password.');
                 }
 
-                $stmt = $pdo->prepare(
-                    'INSERT INTO users
-                    (
-                        full_name, email, password_hash, role, course,
-                        department, is_active, service, description
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)'
+                $department = normalize_staff_department(
+                    $role,
+                    $department
                 );
+
+                validate_staff_fields(
+                    $fullName,
+                    $email,
+                    $role,
+                    $department,
+                    $service,
+                    $password,
+                    true,
+                    $staffRoles
+                );
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO users (
+                        full_name,
+                        email,
+                        password_hash,
+                        role,
+                        course,
+                        department,
+                        is_active,
+                        service,
+                        description
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ");
 
                 $stmt->execute([
                     $fullName,
@@ -111,67 +179,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $message = 'Staff account created successfully.';
+
             } elseif ($action === 'update') {
                 $id = filter_var(
                     $_POST['staff_id'] ?? null,
                     FILTER_VALIDATE_INT
                 );
 
-                $fullName = trim($_POST['full_name'] ?? '');
-                $email = trim($_POST['email'] ?? '');
-                $password = $_POST['password'] ?? '';
-                $role = $_POST['role'] ?? '';
-                $department = trim($_POST['department'] ?? '');
-                if ($role === 'counselor') {
-                $department = 'Counseling Services';
-                } elseif ($role === 'university_staff') {
-                $department = 'University Services';
-                }
-                $service = trim($_POST['service'] ?? '');
-                $description = trim($_POST['description'] ?? '');
-
                 if (!$id || $id < 1) {
                     throw new RuntimeException('Invalid staff account.');
                 }
 
-                $check = $pdo->prepare(
-                    'SELECT id FROM users
-                     WHERE id = ? AND role IN (?, ?, ?, ?, ?)'
-                );
+                // Confirm the account is a consultation-provider staff account.
+                $check = $pdo->prepare("
+                    SELECT id
+                    FROM users
+                    WHERE id = ?
+                      AND role IN (?, ?, ?, ?, ?)
+                ");
+
                 $check->execute(array_merge([$id], $staffRoles));
 
                 if (!$check->fetch()) {
                     throw new RuntimeException('Staff account not found.');
                 }
 
-                if (
-                    $fullName === '' ||
-                    !filter_var($email, FILTER_VALIDATE_EMAIL) ||
-                    ($role !== 'counselor' &&
-                     $role !== 'university_staff' &&
-                    $department === '') ||
-                    !is_valid_staff_role($role, $staffRoles) ||
-                    !is_string($password)
-                ) {
-                    throw new RuntimeException(
-                        'Enter a valid name, email, department and role.'
-                    );
+                $fullName = trim($_POST['full_name'] ?? '');
+                $email = strtolower(trim($_POST['email'] ?? ''));
+                $password = $_POST['password'] ?? '';
+                $role = $_POST['role'] ?? '';
+                $department = trim($_POST['department'] ?? '');
+                $service = trim($_POST['service'] ?? '');
+                $description = trim($_POST['description'] ?? '');
+
+                if (!is_string($password)) {
+                    throw new RuntimeException('Invalid password.');
                 }
 
-                if ($password !== '' && strlen($password) < 8) {
-                    throw new RuntimeException(
-                        'A new password must contain at least 8 characters.'
-                    );
-                }
+                $department = normalize_staff_department(
+                    $role,
+                    $department
+                );
+
+                validate_staff_fields(
+                    $fullName,
+                    $email,
+                    $role,
+                    $department,
+                    $service,
+                    $password,
+                    false,
+                    $staffRoles
+                );
 
                 if ($password !== '') {
-                    $stmt = $pdo->prepare(
-                        'UPDATE users
-                         SET full_name = ?, email = ?, password_hash = ?,
-                             role = ?, department = ?, service = ?,
-                             description = ?
-                         WHERE id = ?'
-                    );
+                    $stmt = $pdo->prepare("
+                        UPDATE users
+                        SET full_name = ?,
+                            email = ?,
+                            password_hash = ?,
+                            role = ?,
+                            department = ?,
+                            service = ?,
+                            description = ?
+                        WHERE id = ?
+                          AND role IN (?, ?, ?, ?, ?)
+                    ");
 
                     $stmt->execute([
                         $fullName,
@@ -181,15 +254,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $department,
                         $service !== '' ? $service : null,
                         $description !== '' ? $description : null,
-                        $id
+                        $id,
+                        ...$staffRoles
                     ]);
                 } else {
-                    $stmt = $pdo->prepare(
-                        'UPDATE users
-                         SET full_name = ?, email = ?, role = ?,
-                             department = ?, service = ?, description = ?
-                         WHERE id = ?'
-                    );
+                    $stmt = $pdo->prepare("
+                        UPDATE users
+                        SET full_name = ?,
+                            email = ?,
+                            role = ?,
+                            department = ?,
+                            service = ?,
+                            description = ?
+                        WHERE id = ?
+                          AND role IN (?, ?, ?, ?, ?)
+                    ");
 
                     $stmt->execute([
                         $fullName,
@@ -198,11 +277,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $department,
                         $service !== '' ? $service : null,
                         $description !== '' ? $description : null,
-                        $id
+                        $id,
+                        ...$staffRoles
                     ]);
                 }
 
                 $message = 'Staff account updated successfully.';
+
             } elseif ($action === 'toggle_status') {
                 $id = filter_var(
                     $_POST['staff_id'] ?? null,
@@ -213,48 +294,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('Invalid staff account.');
                 }
 
-                $stmt = $pdo->prepare(
-                    'UPDATE users
-                     SET is_active = IF(is_active = 1, 0, 1)
-                     WHERE id = ? AND role IN (?, ?, ?, ?, ?)'
-                );
+                $stmt = $pdo->prepare("
+                    UPDATE users
+                    SET is_active = IF(is_active = 1, 0, 1)
+                    WHERE id = ?
+                      AND role IN (?, ?, ?, ?, ?)
+                ");
 
                 $stmt->execute(array_merge([$id], $staffRoles));
 
-                if ($stmt->rowCount() === 0) {
+                if ($stmt->rowCount() !== 1) {
                     throw new RuntimeException(
-                        'Staff account not found or its status was unchanged.'
+                        'Staff account not found or its status could not be changed.'
                     );
                 }
 
-                $message = 'Staff account status updated.';
+                $message = 'Staff account status updated successfully.';
+
             } else {
                 throw new RuntimeException('Invalid action.');
             }
+
         } catch (RuntimeException $e) {
             $error = $e->getMessage();
+
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
                 $error = 'That email address is already in use.';
             } else {
-                error_log($e->getMessage());
+                error_log('Staff management database error: ' . $e->getMessage());
                 $error = 'A database error occurred. Check the server error log.';
             }
         }
     }
 }
 
-// Load the staff account selected for editing.
+// Load the selected staff account for editing.
 $editingStaff = null;
 $editId = filter_input(INPUT_GET, 'edit', FILTER_VALIDATE_INT);
 
 if ($editId) {
-    $stmt = $pdo->prepare(
-        'SELECT id, full_name, email, role, department, service,
-                description, is_active
-         FROM users
-         WHERE id = ? AND role IN (?, ?, ?, ?, ?)'
-    );
+    $stmt = $pdo->prepare("
+        SELECT
+            id,
+            full_name,
+            email,
+            role,
+            department,
+            service,
+            description,
+            is_active
+        FROM users
+        WHERE id = ?
+          AND role IN (?, ?, ?, ?, ?)
+    ");
+
     $stmt->execute(array_merge([$editId], $staffRoles));
     $editingStaff = $stmt->fetch();
 
@@ -263,18 +357,28 @@ if ($editId) {
     }
 }
 
-// Load staff accounts without exposing their password hashes.
+// Load staff accounts without retrieving password hashes.
 $placeholders = implode(',', array_fill(0, count($staffRoles), '?'));
 
-$stmt = $pdo->prepare(
-    "SELECT id, full_name, email, role, department, service,
-            description, is_active
-     FROM users
-     WHERE role IN ($placeholders)
-     ORDER BY full_name"
-);
+$stmt = $pdo->prepare("
+    SELECT
+        id,
+        full_name,
+        email,
+        role,
+        department,
+        service,
+        description,
+        is_active
+    FROM users
+    WHERE role IN ($placeholders)
+    ORDER BY full_name
+");
+
 $stmt->execute($staffRoles);
 $staffMembers = $stmt->fetchAll();
+
+$pageTitle = 'Manage Staff | Student Consultation System';
 ?>
 
 <!DOCTYPE html>
@@ -282,7 +386,7 @@ $staffMembers = $stmt->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Staff | Student Consultation System</title>
+    <title><?= e($pageTitle) ?></title>
 
     <style>
         * {
@@ -373,20 +477,20 @@ $staffMembers = $stmt->fetchAll();
             background: #a62d36;
         }
 
-        .success-message {
+        .success-message, .error-message {
             padding: 12px;
             margin-bottom: 18px;
-            background: #e5f6e9;
-            color: #205c31;
             border-radius: 5px;
         }
 
+        .success-message {
+            background: #e5f6e9;
+            color: #205c31;
+        }
+
         .error-message {
-            padding: 12px;
-            margin-bottom: 18px;
             background: #fde8e8;
             color: #842029;
-            border-radius: 5px;
         }
 
         .table-wrap {
@@ -458,25 +562,26 @@ $staffMembers = $stmt->fetchAll();
 </head>
 
 <body>
-<div class="container">
+<main class="container">
 
-    <div class="top-links">
+    <nav class="top-links" aria-label="Administrator navigation">
         <a href="/admin/dashboard.php">← Admin Dashboard</a>
         <a href="/index.php">Home</a>
-    </div>
+        <a href="/logout.php">Logout</a>
+    </nav>
 
     <h1>Staff Management</h1>
     <p>Create staff accounts and manage their profiles and access.</p>
 
     <?php if ($message !== ''): ?>
-        <div class="success-message">
-            <?= escape_output($message) ?>
+        <div class="success-message" role="status">
+            <?= e($message) ?>
         </div>
     <?php endif; ?>
 
     <?php if ($error !== ''): ?>
-        <div class="error-message">
-            <?= escape_output($error) ?>
+        <div class="error-message" role="alert">
+            <?= e($error) ?>
         </div>
     <?php endif; ?>
 
@@ -485,29 +590,53 @@ $staffMembers = $stmt->fetchAll();
             <?= $editingStaff ? 'Edit Staff Account' : 'Create Staff Account' ?>
         </h2>
 
-        <form method="POST" action="/admin/staff.php<?= $editingStaff ? '?edit=' . (int) $editingStaff['id'] : '' ?>">
-            <input type="hidden" name="csrf_token"
-                   value="<?= escape_output($csrfToken) ?>">
+        <form
+            method="post"
+            action="/admin/staff.php<?= $editingStaff ? '?edit=' . (int) $editingStaff['id'] : '' ?>"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="<?= e($csrfToken) ?>"
+            >
 
-            <input type="hidden" name="action"
-                   value="<?= $editingStaff ? 'update' : 'create' ?>">
+            <input
+                type="hidden"
+                name="action"
+                value="<?= $editingStaff ? 'update' : 'create' ?>"
+            >
 
             <?php if ($editingStaff): ?>
-                <input type="hidden" name="staff_id"
-                       value="<?= (int) $editingStaff['id'] ?>">
+                <input
+                    type="hidden"
+                    name="staff_id"
+                    value="<?= (int) $editingStaff['id'] ?>"
+                >
             <?php endif; ?>
 
             <div class="form-grid">
+
                 <div class="field">
                     <label for="full_name">Full name *</label>
-                    <input id="full_name" name="full_name" required
-                           value="<?= escape_output($editingStaff['full_name'] ?? '') ?>">
+                    <input
+                        id="full_name"
+                        name="full_name"
+                        maxlength="150"
+                        required
+                        value="<?= e($editingStaff['full_name'] ?? '') ?>"
+                    >
                 </div>
 
                 <div class="field">
                     <label for="email">Email address *</label>
-                    <input id="email" name="email" type="email" required
-                           value="<?= escape_output($editingStaff['email'] ?? '') ?>">
+                    <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        maxlength="190"
+                        required
+                        value="<?= e($editingStaff['email'] ?? '') ?>"
+                    >
                 </div>
 
                 <div class="field">
@@ -516,9 +645,11 @@ $staffMembers = $stmt->fetchAll();
                         <option value="">Select a role</option>
 
                         <?php foreach ($roleLabels as $value => $label): ?>
-                            <option value="<?= escape_output($value) ?>"
-                                <?= ($editingStaff['role'] ?? '') === $value ? 'selected' : '' ?>>
-                                <?= escape_output($label) ?>
+                            <option
+                                value="<?= e($value) ?>"
+                                <?= ($editingStaff['role'] ?? '') === $value ? 'selected' : '' ?>
+                            >
+                                <?= e($label) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -526,25 +657,47 @@ $staffMembers = $stmt->fetchAll();
 
                 <div class="field" id="departmentField">
                     <label for="department">Department *</label>
-                        <input id="department" name="department" required
+                    <input
+                        id="department"
+                        name="department"
                         placeholder="e.g. Law School"
-                        value="<?= escape_output($editingStaff['department'] ?? '') ?>">
+                        value="<?= e($editingStaff['department'] ?? '') ?>"
+                    >
                 </div>
 
                 <div class="field">
-                <label for="service">Service <span id="serviceRequiredMark" hidden>*</span></label>
-                <input id="service" name="service"
-                placeholder="e.g. ICT Services, Library"
-                value="<?= escape_output($editingStaff['service'] ?? '') ?>">
-                <small id="serviceHelp">Optional for this role.</small>
+                    <label for="service">
+                        Service
+                        <span id="serviceRequiredMark" hidden>*</span>
+                    </label>
+
+                    <input
+                        id="service"
+                        name="service"
+                        maxlength="100"
+                        placeholder="e.g. ICT Services, Library"
+                        value="<?= e($editingStaff['service'] ?? '') ?>"
+                    >
+
+                    <small id="serviceHelp">
+                        Optional for this role.
+                    </small>
                 </div>
+
                 <div class="field">
                     <label for="password">
                         <?= $editingStaff ? 'New password (optional)' : 'Initial password *' ?>
                     </label>
-                    <input id="password" name="password" type="password"
-                           minlength="8" autocomplete="new-password"
-                           <?= $editingStaff ? '' : 'required' ?>>
+
+                    <input
+                        id="password"
+                        name="password"
+                        type="password"
+                        minlength="8"
+                        autocomplete="new-password"
+                        <?= $editingStaff ? '' : 'required' ?>
+                    >
+
                     <?php if ($editingStaff): ?>
                         <small>Leave blank to keep the current password.</small>
                     <?php else: ?>
@@ -554,9 +707,13 @@ $staffMembers = $stmt->fetchAll();
 
                 <div class="field full">
                     <label for="description">Short profile description</label>
-                    <textarea id="description" name="description"
-                              placeholder="Briefly describe the staff member's service or role."><?= escape_output($editingStaff['description'] ?? '') ?></textarea>
+                    <textarea
+                        id="description"
+                        name="description"
+                        placeholder="Briefly describe the staff member's service or role."
+                    ><?= e($editingStaff['description'] ?? '') ?></textarea>
                 </div>
+
             </div>
 
             <p>
@@ -565,7 +722,9 @@ $staffMembers = $stmt->fetchAll();
                 </button>
 
                 <?php if ($editingStaff): ?>
-                    <a class="button secondary" href="/admin/staff.php">Cancel</a>
+                    <a class="button secondary" href="/admin/staff.php">
+                        Cancel
+                    </a>
                 <?php endif; ?>
             </p>
         </form>
@@ -574,40 +733,43 @@ $staffMembers = $stmt->fetchAll();
     <section class="panel">
         <h2>Existing Staff Accounts (<?= count($staffMembers) ?>)</h2>
 
-        <?php if (!$staffMembers): ?>
+        <?php if (empty($staffMembers)): ?>
+
             <p>No staff accounts have been created yet.</p>
+
         <?php else: ?>
+
             <div class="table-wrap">
                 <table>
                     <thead>
-                    <tr>
-                        <th>Name and Email</th>
-                        <th>Role</th>
-                        <th>Department / Service</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
+                        <tr>
+                            <th>Name and Email</th>
+                            <th>Role</th>
+                            <th>Department / Service</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
                     </thead>
 
                     <tbody>
                     <?php foreach ($staffMembers as $staff): ?>
                         <tr>
                             <td>
-                                <strong><?= escape_output($staff['full_name']) ?></strong>
+                                <strong><?= e($staff['full_name']) ?></strong>
                                 <br>
-                                <?= escape_output($staff['email']) ?>
+                                <?= e($staff['email']) ?>
                             </td>
 
                             <td>
-                                <?= escape_output($roleLabels[$staff['role']] ?? $staff['role']) ?>
+                                <?= e($roleLabels[$staff['role']] ?? $staff['role']) ?>
                             </td>
 
                             <td>
-                                <?= escape_output($staff['department']) ?>
+                                <?= e($staff['department'] ?? '') ?>
 
                                 <?php if (!empty($staff['service'])): ?>
                                     <br>
-                                    <small><?= escape_output($staff['service']) ?></small>
+                                    <small><?= e($staff['service']) ?></small>
                                 <?php endif; ?>
                             </td>
 
@@ -621,21 +783,40 @@ $staffMembers = $stmt->fetchAll();
 
                             <td>
                                 <div class="actions">
-                                    <a class="button small-button"
-                                       href="/admin/staff.php?edit=<?= (int) $staff['id'] ?>">
+                                    <a
+                                        class="button small-button"
+                                        href="/admin/staff.php?edit=<?= (int) $staff['id'] ?>"
+                                    >
                                         Edit
                                     </a>
 
-                                    <form method="POST" action="/admin/staff.php">
-                                        <input type="hidden" name="csrf_token"
-                                               value="<?= escape_output($csrfToken) ?>">
-                                        <input type="hidden" name="action"
-                                               value="toggle_status">
-                                        <input type="hidden" name="staff_id"
-                                               value="<?= (int) $staff['id'] ?>">
+                                    <form
+                                        method="post"
+                                        action="/admin/staff.php"
+                                        onsubmit="return confirm('Change the access status of this staff account?');"
+                                    >
+                                        <input
+                                            type="hidden"
+                                            name="csrf_token"
+                                            value="<?= e($csrfToken) ?>"
+                                        >
 
-                                        <button class="small-button <?= (int) $staff['is_active'] === 1 ? 'danger' : 'secondary' ?>"
-                                                type="submit">
+                                        <input
+                                            type="hidden"
+                                            name="action"
+                                            value="toggle_status"
+                                        >
+
+                                        <input
+                                            type="hidden"
+                                            name="staff_id"
+                                            value="<?= (int) $staff['id'] ?>"
+                                        >
+
+                                        <button
+                                            class="small-button <?= (int) $staff['is_active'] === 1 ? 'danger' : 'secondary' ?>"
+                                            type="submit"
+                                        >
                                             <?= (int) $staff['is_active'] === 1 ? 'Deactivate' : 'Reactivate' ?>
                                         </button>
                                     </form>
@@ -646,12 +827,13 @@ $staffMembers = $stmt->fetchAll();
                     </tbody>
                 </table>
             </div>
+
         <?php endif; ?>
     </section>
 
-</div>
-<script>
+</main>
 
+<script>
 document.addEventListener('DOMContentLoaded', function () {
     const roleSelect = document.getElementById('role');
     const departmentField = document.getElementById('departmentField');
@@ -663,50 +845,42 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateDepartmentField() {
         const role = roleSelect.value;
 
-        // Counselor: hide department and use a fixed value.
         if (role === 'counselor') {
             departmentField.hidden = true;
             departmentInput.required = false;
             departmentInput.value = 'Counseling Services';
 
-        // University staff: hide department and require a service.
         } else if (role === 'university_staff') {
             departmentField.hidden = true;
             departmentInput.required = false;
             departmentInput.value = 'University Services';
 
-        // Other staff roles must provide a department.
         } else {
             departmentField.hidden = false;
             departmentInput.required = true;
 
-            // Clear the automatic values when switching roles.
             if (
-                departmentInput.value === 'Counseling Services' ||
-                departmentInput.value === 'University Services'
+                departmentInput.value === 'Counseling Services'
+                || departmentInput.value === 'University Services'
             ) {
                 departmentInput.value = '';
             }
         }
 
-        // Service is mandatory only for university staff.
         const isUniversityStaff = role === 'university_staff';
 
         serviceInput.required = isUniversityStaff;
         serviceRequiredMark.hidden = !isUniversityStaff;
+
         serviceHelp.textContent = isUniversityStaff
-         ? 'Required: enter the service this staff member provides.'
-        : 'Optional for this role.';
-        }
+            ? 'Required: enter the service this staff member provides.'
+            : 'Optional for this role.';
+    }
 
-    // Update the fields whenever the role changes.
     roleSelect.addEventListener('change', updateDepartmentField);
-
-    // Set the correct fields when the page first loads,
-    // including when editing an existing staff account.
     updateDepartmentField();
 });
-
 </script>
+
 </body>
 </html>

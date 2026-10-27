@@ -5,7 +5,7 @@ $user = require_role('lecturer');
 
 $stmt = get_pdo()->prepare("
     SELECT COUNT(*) FROM consultation_slots
-    WHERE lecturer_id = ? AND status = 'available' AND slot_date >= CURDATE()
+    WHERE staff_id = ? AND status = 'available' AND slot_date >= CURDATE()
 ");
 $stmt->execute([$user['id']]);
 $availableCount = (int) $stmt->fetchColumn();
@@ -13,7 +13,7 @@ $availableCount = (int) $stmt->fetchColumn();
 $stmt = get_pdo()->prepare("
     SELECT COUNT(*) FROM bookings b
     JOIN consultation_slots cs ON cs.id = b.slot_id
-    WHERE cs.lecturer_id = ? AND b.status = 'active' AND cs.slot_date >= CURDATE()
+    WHERE cs.staff_id = ? AND b.status = 'active' AND cs.slot_date >= CURDATE()
 ");
 $stmt->execute([$user['id']]);
 $upcomingBookings = (int) $stmt->fetchColumn();

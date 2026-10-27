@@ -14,7 +14,7 @@ $upcomingCount = (int) $stmt->fetchColumn();
 $staffAvailableCount = (int) get_pdo()->query("
     SELECT COUNT(DISTINCT u.id)
     FROM users u
-    JOIN consultation_slots cs ON cs.lecturer_id = u.id
+    JOIN consultation_slots cs ON cs.staff_id = u.id
     WHERE u.role IN (
         'lecturer',
         'academic_advisor',

@@ -1,5 +1,6 @@
 
 <?php
+
 require_once __DIR__ . '/../partials/bootstrap.php';
 
 $staffRoles = [
@@ -12,6 +13,7 @@ $staffRoles = [
 
 $user = current_user();
 
+// Only authenticated staff members may manage their own slots.
 if (!$user || !in_array($user['role'], $staffRoles, true)) {
     header('Location: /login_staff.php');
     exit;
@@ -20,11 +22,17 @@ if (!$user || !in_array($user['role'], $staffRoles, true)) {
 $pdo = get_pdo();
 $errors = [];
 
+/**
+ * Fetch a consultation slot belonging to the specified staff member.
+ */
 function fetch_own_staff_slot(PDO $pdo, int $slotId, int $staffId): ?array
 {
     $stmt = $pdo->prepare(
-        'SELECT * FROM consultation_slots WHERE id = ? AND lecturer_id = ?'
+        'SELECT *
+         FROM consultation_slots
+         WHERE id = ? AND staff_id = ?'
     );
+
     $stmt->execute([$slotId, $staffId]);
 
     $slot = $stmt->fetch();
@@ -32,9 +40,67 @@ function fetch_own_staff_slot(PDO $pdo, int $slotId, int $staffId): ?array
     return $slot ?: null;
 }
 
+/**
+ * Validate the date and time submitted by the staff member.
+ */
+function validate_staff_slot(
+    string $date,
+    string $start,
+    string $end,
+    array &$errors
+): bool {
+    if ($date === '' || $start === '' || $end === '') {
+        $errors[] = 'Date, start time, and end time are all required.';
+        return false;
+    }
+
+    $dateObject = DateTime::createFromFormat('!Y-m-d', $date);
+    $dateErrors = DateTime::getLastErrors();
+
+    if (
+        !$dateObject ||
+        ($dateErrors !== false &&
+            ($dateErrors['warning_count'] > 0 ||
+             $dateErrors['error_count'] > 0)) ||
+        $dateObject->format('Y-m-d') !== $date
+    ) {
+        $errors[] = 'Please enter a valid date.';
+        return false;
+    }
+
+    if (
+        !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start) ||
+        !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $end)
+    ) {
+        $errors[] = 'Please enter valid start and end times.';
+        return false;
+    }
+
+    if ($date < date('Y-m-d')) {
+        $errors[] = 'Slot date cannot be in the past.';
+        return false;
+    }
+
+    if ($end <= $start) {
+        $errors[] = 'End time must be after start time.';
+        return false;
+    }
+
+    if (
+        $date === date('Y-m-d') &&
+        $start <= date('H:i')
+    ) {
+        $errors[] = 'The start time must be in the future.';
+        return false;
+    }
+
+    return true;
+}
+
+// Handle slot creation, editing, and deletion.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'Your session expired. Please try again.';
+        $errors[] = 'Your session expired. Please refresh the page and try again.';
     } else {
         $action = $_POST['action'] ?? '';
 
@@ -43,20 +109,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $start = trim($_POST['start_time'] ?? '');
             $end = trim($_POST['end_time'] ?? '');
 
-            if ($date === '' || $start === '' || $end === '') {
-                $errors[] = 'Date, start time, and end time are all required.';
-            } elseif ($date < date('Y-m-d')) {
-                $errors[] = 'Slot date cannot be in the past.';
-            } elseif ($end <= $start) {
-                $errors[] = 'End time must be after start time.';
-            } else {
+            if (validate_staff_slot($date, $start, $end, $errors)) {
                 $stmt = $pdo->prepare(
                     'INSERT INTO consultation_slots
-                    (lecturer_id, slot_date, start_time, end_time)
-                    VALUES (?, ?, ?, ?)'
+                        (staff_id, slot_date, start_time, end_time, status)
+                     VALUES (?, ?, ?, ?, ?)'
                 );
 
-                $stmt->execute([$user['id'], $date, $start, $end]);
+                $stmt->execute([
+                    $user['id'],
+                    $date,
+                    $start,
+                    $end,
+                    'available'
+                ]);
 
                 flash_set('success', 'Consultation slot created.');
                 header('Location: /staff/manage_slots.php');
@@ -64,7 +130,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($action === 'update') {
             $slotId = (int) ($_POST['slot_id'] ?? 0);
-            $slot = fetch_own_staff_slot($pdo, $slotId, $user['id']);
+
+            $slot = fetch_own_staff_slot(
+                $pdo,
+                $slotId,
+                (int) $user['id']
+            );
 
             if (!$slot) {
                 $errors[] = 'Slot not found.';
@@ -75,17 +146,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $start = trim($_POST['start_time'] ?? '');
                 $end = trim($_POST['end_time'] ?? '');
 
-                if ($date === '' || $start === '' || $end === '') {
-                    $errors[] = 'Date, start time, and end time are all required.';
-                } elseif ($date < date('Y-m-d')) {
-                    $errors[] = 'Slot date cannot be in the past.';
-                } elseif ($end <= $start) {
-                    $errors[] = 'End time must be after start time.';
-                } else {
+                if (validate_staff_slot($date, $start, $end, $errors)) {
                     $stmt = $pdo->prepare(
                         'UPDATE consultation_slots
                          SET slot_date = ?, start_time = ?, end_time = ?
-                         WHERE id = ? AND lecturer_id = ? AND status = ?'
+                         WHERE id = ?
+                           AND staff_id = ?
+                           AND status = ?'
                     );
 
                     $stmt->execute([
@@ -104,7 +171,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($action === 'delete') {
             $slotId = (int) ($_POST['slot_id'] ?? 0);
-            $slot = fetch_own_staff_slot($pdo, $slotId, $user['id']);
+
+            $slot = fetch_own_staff_slot(
+                $pdo,
+                $slotId,
+                (int) $user['id']
+            );
 
             if (!$slot) {
                 $errors[] = 'Slot not found.';
@@ -113,26 +185,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $stmt = $pdo->prepare(
                     'DELETE FROM consultation_slots
-                     WHERE id = ? AND lecturer_id = ? AND status = ?'
+                     WHERE id = ?
+                       AND staff_id = ?
+                       AND status = ?'
                 );
 
-                $stmt->execute([$slotId, $user['id'], 'available']);
+                $stmt->execute([
+                    $slotId,
+                    $user['id'],
+                    'available'
+                ]);
 
-                flash_set('success', 'Consultation slot removed.');
-                header('Location: /staff/manage_slots.php');
-                exit;
+                if ($stmt->rowCount() > 0) {
+                    flash_set('success', 'Consultation slot removed.');
+                    header('Location: /staff/manage_slots.php');
+                    exit;
+                }
+
+                $errors[] = 'The slot could not be removed. Please refresh and try again.';
             }
+        } else {
+            $errors[] = 'Invalid action requested.';
         }
     }
 }
 
+// Load a slot for editing, if requested.
 $editSlot = null;
 
 if (isset($_GET['edit'])) {
     $editSlot = fetch_own_staff_slot(
         $pdo,
         (int) $_GET['edit'],
-        $user['id']
+        (int) $user['id']
     );
 
     if ($editSlot && $editSlot['status'] !== 'available') {
@@ -140,7 +225,16 @@ if (isset($_GET['edit'])) {
     }
 }
 
-$slots = list_lecturer_slots((int) $user['id']);
+// Load only the logged-in staff member's slots.
+$stmt = $pdo->prepare(
+    'SELECT *
+     FROM consultation_slots
+     WHERE staff_id = ?
+     ORDER BY slot_date ASC, start_time ASC'
+);
+
+$stmt->execute([$user['id']]);
+$slots = $stmt->fetchAll();
 
 $pageTitle = 'Manage Consultation Slots';
 require __DIR__ . '/../partials/header.php';
@@ -201,7 +295,9 @@ require __DIR__ . '/../partials/header.php';
             type="time"
             id="start_time"
             name="start_time"
-            value="<?= e(substr($editSlot['start_time'] ?? '', 0, 5)) ?>"
+            value="<?= e(isset($editSlot['start_time'])
+                ? substr($editSlot['start_time'], 0, 5)
+                : '') ?>"
             required
         >
 
@@ -210,7 +306,9 @@ require __DIR__ . '/../partials/header.php';
             type="time"
             id="end_time"
             name="end_time"
-            value="<?= e(substr($editSlot['end_time'] ?? '', 0, 5)) ?>"
+            value="<?= e(isset($editSlot['end_time'])
+                ? substr($editSlot['end_time'], 0, 5)
+                : '') ?>"
             required
         >
 
@@ -242,7 +340,7 @@ require __DIR__ . '/../partials/header.php';
                         <th>Date</th>
                         <th>Time</th>
                         <th>Status</th>
-                        <th></th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
 
@@ -278,7 +376,7 @@ require __DIR__ . '/../partials/header.php';
                                 <?php endif; ?>
                             </td>
 
-                            <td data-label="">
+                            <td data-label="Actions">
                                 <?php if ($slot['status'] === 'available'): ?>
                                     <a
                                         class="btn btn-sm btn-secondary"

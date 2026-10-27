@@ -1,7 +1,9 @@
 
 <?php
-require_once __DIR__ . '/../../src/auth.php';
 
+require_once __DIR__ . '/../partials/bootstrap.php';
+
+// Only administrators may access this dashboard.
 $user = current_user();
 
 if (!$user || $user['role'] !== 'admin') {
@@ -11,7 +13,8 @@ if (!$user || $user['role'] !== 'admin') {
 
 $pdo = get_pdo();
 
-$staffCount = $pdo->query("
+// Count all consultation-provider staff accounts, including inactive ones.
+$staffCount = (int) $pdo->query("
     SELECT COUNT(*)
     FROM users
     WHERE role IN (
@@ -23,24 +26,28 @@ $staffCount = $pdo->query("
     )
 ")->fetchColumn();
 
-$activeStaffCount = $pdo->query("
+// Count active consultation-provider staff accounts.
+$activeStaffCount = (int) $pdo->query("
     SELECT COUNT(*)
     FROM users
     WHERE is_active = 1
       AND role IN (
-        'lecturer',
-        'academic_advisor',
-        'department_head',
-        'counselor',
-        'university_staff'
+          'lecturer',
+          'academic_advisor',
+          'department_head',
+          'counselor',
+          'university_staff'
       )
 ")->fetchColumn();
 
-$studentCount = $pdo->query("
+// Count all student accounts.
+$studentCount = (int) $pdo->query("
     SELECT COUNT(*)
     FROM users
     WHERE role = 'student'
 ")->fetchColumn();
+
+$pageTitle = 'Admin Dashboard';
 ?>
 
 <!DOCTYPE html>
@@ -48,7 +55,9 @@ $studentCount = $pdo->query("
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
+
+    <title><?= e($pageTitle) ?></title>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -97,45 +106,65 @@ $studentCount = $pdo->query("
             text-decoration: none;
             border-radius: 5px;
         }
+
+        .actions a:hover {
+            background: #24558a;
+        }
+
+        .actions a:focus-visible {
+            outline: 3px solid #7aa7d9;
+            outline-offset: 3px;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 16px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+        }
     </style>
 </head>
+
 <body>
-    <div class="container">
+    <main class="container">
         <h1>Admin Dashboard</h1>
 
         <p>
             Welcome,
-            <?= htmlspecialchars($user['full_name']) ?>.
+            <?= e($user['full_name']) ?>.
         </p>
 
         <div class="cards">
-            <div class="card">
+            <section class="card">
                 <h2>Total Staff Accounts</h2>
                 <div class="number">
-                    <?= (int) $staffCount ?>
+                    <?= $staffCount ?>
                 </div>
-            </div>
+            </section>
 
-            <div class="card">
+            <section class="card">
                 <h2>Active Staff Accounts</h2>
                 <div class="number">
-                    <?= (int) $activeStaffCount ?>
+                    <?= $activeStaffCount ?>
                 </div>
-            </div>
+            </section>
 
-            <div class="card">
+            <section class="card">
                 <h2>Student Accounts</h2>
                 <div class="number">
-                    <?= (int) $studentCount ?>
+                    <?= $studentCount ?>
                 </div>
-            </div>
+            </section>
         </div>
 
-        <div class="actions">
+        <nav class="actions" aria-label="Administrator navigation">
             <a href="/admin/staff.php">Manage Staff</a>
             <a href="/index.php">Home</a>
             <a href="/logout.php">Logout</a>
-        </div>
-    </div>
+        </nav>
+    </main>
 </body>
 </html>

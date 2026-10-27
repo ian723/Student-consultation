@@ -1,8 +1,20 @@
+
 <?php
+
 require_once __DIR__ . '/partials/bootstrap.php';
 
-if (current_user()) {
-    header('Location: /index.php');
+// Redirect users who are already logged in.
+$user = current_user();
+
+if ($user) {
+    if ($user['role'] === 'student') {
+        header('Location: /student/dashboard.php');
+    } elseif ($user['role'] === 'admin') {
+        header('Location: /admin/dashboard.php');
+    } else {
+        header('Location: /staff/dashboard.php');
+    }
+
     exit;
 }
 
@@ -13,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
     } else {
-        $oldEmail = trim($_POST['email'] ?? '');
+        $oldEmail = strtolower(trim($_POST['email'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
 
         $user = attempt_login($oldEmail, $password, 'student');
@@ -22,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Incorrect email or password.';
         } else {
             login_user($user);
+
             header('Location: /student/dashboard.php');
             exit;
         }
@@ -29,62 +42,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = 'Student Login';
+
 require __DIR__ . '/partials/header.php';
 ?>
 
-<div class="auth-wrap">
-  <h1>Student Login</h1>
-  <p class="page-subtitle">Welcome back — log in to manage your bookings.</p>
+<main class="auth-wrap">
+    <h1>Student Login</h1>
 
-  <div class="card">
-    <?php if ($error): ?>
-      <div class="alert alert-error">
-        <span class="alert-icon" aria-hidden="true">&#9888;</span>
-        <span><?= e($error) ?></span>
-      </div>
-    <?php endif; ?>
+    <p class="page-subtitle">
+        Welcome back — log in to manage your bookings.
+    </p>
 
-    <form method="post" action="/login_student.php">
-      <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+    <div class="card">
 
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" value="<?= e($oldEmail) ?>" required>
-      </div>
+        <?php if ($error): ?>
+            <div class="alert alert-error" role="alert">
+                <span class="alert-icon" aria-hidden="true">&#9888;</span>
+                <span><?= e($error) ?></span>
+            </div>
+        <?php endif; ?>
 
-<div class="password-wrapper">
-    <label for="password">Password</label>
+        <form method="post" action="/login_student.php">
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="<?= e(csrf_token()) ?>"
+            >
 
-    <div class="password-input-container">
-        <input type="password" id="password" name="password" required>
+            <div class="form-group">
+                <label for="email">Email</label>
 
-        <button type="button" class="toggle-password">
-            👁
-        </button>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value="<?= e($oldEmail) ?>"
+                    autocomplete="username"
+                    required
+                >
+            </div>
+
+            <div class="password-wrapper">
+                <label for="password">Password</label>
+
+                <div class="password-input-container">
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        autocomplete="current-password"
+                        required
+                    >
+
+                    <button
+                        type="button"
+                        class="toggle-password"
+                        aria-label="Show password"
+                        aria-pressed="false"
+                        aria-controls="password"
+                        onclick="togglePassword('password', this)"
+                    >
+                        &#128065;
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn">
+                Log in
+            </button>
+        </form>
+
+        <p class="muted auth-footer-note">
+            No account yet?
+            <a href="/register.php">Register</a>
+        </p>
     </div>
-</div>
+</main>
 
-     
-
-      <button type="submit" class="btn">Log in</button>
-    </form>
-
-    <p class="muted auth-footer-note">No account yet? <a href="/register.php">Register</a></p>
-  </div>
-</div>
 <script>
 function togglePassword(inputId, button) {
     const input = document.getElementById(inputId);
 
-    if (!input) return;
+    if (!input) {
+        return;
+    }
 
-    const showing = input.type === "password";
+    const showing = input.type === 'password';
 
-    input.type = showing ? "text" : "password";
-    button.setAttribute("aria-pressed", String(showing));
+    input.type = showing ? 'text' : 'password';
+
+    button.setAttribute('aria-pressed', String(showing));
     button.setAttribute(
-        "aria-label",
-        showing ? "Hide password" : "Show password"
+        'aria-label',
+        showing ? 'Hide password' : 'Show password'
     );
 }
 </script>

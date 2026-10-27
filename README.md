@@ -48,7 +48,7 @@ Built as a school project for Kabarak University using plain PHP and MySQL
   `password_verify()`.
 - Database queries use PDO prepared statements, and rendered output is escaped.
 - Forms use CSRF protection where implemented.
-- Consultation slots use the `lecturer_id` database column to reference the
+- Consultation slots use the `staff_id` database column to reference the
   provider's user ID, including supported non-lecturer staff roles.
 - Booking concurrency and duplicate-booking protection should be verified
   against the current database schema and booking endpoint before claiming
@@ -66,7 +66,7 @@ Built as a school project for Kabarak University using plain PHP and MySQL
 
 ## Project Structure
 
-```text
+
 sql/
   schema.sql             Database tables and constraints
   seed.sql               Demo/seed data, if provided
@@ -87,7 +87,6 @@ public/                  Web root
   admin/                  Admin dashboard and staff account management
   partials/               Shared header/footer/bootstrap includes
   assets/                 Stylesheets and other public assets
-```
 
 ---
 
@@ -156,13 +155,26 @@ public/                  Web root
 
 ## Try It Out
 
-1. Register a new student account from the homepage.
-2. Log in as a student and browse **Staff & Services**.
-3. Select a provider, view their upcoming consultation slots, and book an
-   available slot.
-4. Visit the student dashboard or bookings page to review the appointment.
-5. Log in through Staff Login to manage provider slots and view bookings.
-6. Log in as an administrator to manage staff accounts.
+Register a student account from the homepage, or use one of the seeded staff
+accounts below. 
+
+| **Email**                     | **Password**|
+| alice.mwangi@kabarak.ac.ke    | lecturer123 |
+| brian.kiptoo@kabarak.ac.ke    | lecturer123 |
+| caroline.wafula@kabarak.ac.ke | lecturer123 |
+| shalomatieno@kabarak.ac.ke    | shalom123   |
+| neliusnyatichi@kabarak.ac.ke  | nelius123   |
+| markphares@kabarak.ac.ke      | phares123   |
+| clarewanjiku@kabarak.ac.ke    | clare123    |
+| annetwambui@kabarak.ac.ke     | annet123    |
+| davidmwangi@kabarak.ac.ke     | david123    |
+| nicolewangui@kabarak.ac.ke    | nicole123   |
+| kennethojijo@kabarak.ac.ke    | kenneth123  |
+| samkelvin@kabarak.ac.ke       | kelvin123   |
+| jonahmwirigi@kabarak.ac.ke    | jonah123    |
+| gracendegwa@kabarak.ac.ke     | grace123    |
+| harunkipkebut@kabarak.ac.ke   | harun123    |
+
 
 ### Login Pages
 
@@ -171,10 +183,9 @@ public/                  Web root
 - Admin dashboard (after logging in):
   [http://localhost:8000/admin/dashboard.php]
 
-Use test accounts only for demonstrations. Check the current database seed file
-or create accounts through the supported workflows for valid credentials. 
-
----
+After logging in, students can browse **Staff & Services**, select a provider,
+and book an available consultation slot. Staff can manage slots and view
+bookings; administrators can manage staff accounts.
 
 ## Possible Future Improvements
 
